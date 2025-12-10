@@ -86,7 +86,7 @@
     <!-- New Post (static, no backend) -->
     <div class="new-post-box">
         <h3>Create a Post</h3>
-        <textarea placeholder="What's on your mind? (Demo only, no save)"></textarea>
+        <textarea placeholder="What's on your mind? (Demo only, no save) changes commited here"></textarea>
         <br>
         <button class="btn">Post (Demo)</button>
     </div>
