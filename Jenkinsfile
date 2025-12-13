@@ -1,11 +1,15 @@
 pipeline {
-    agent any 
+    agent any
 
     environment {
-        APP_NAME    = "social_media_app"
-        APP_DIR     = "/opt/${APP_NAME}"
-        DEPLOY_USER = "ubuntu"
-        DEPLOY_HOST = "44.213.133.82"
+        APP_NAME     = "social_media_app"
+        APP_DIR      = "/opt/${APP_NAME}"
+        DEPLOY_USER  = "ubuntu"
+        DEPLOY_HOST  = "44.213.133.82"
+
+        // Your Tomcat is installed as a service and uses this webapps path:
+        TOMCAT_WEBAPPS = "/var/lib/tomcat10/webapps"
+
         JAVA_HOME   = "/usr/lib/jvm/java-21-openjdk-amd64"
         PATH        = "${JAVA_HOME}/bin:${env.PATH}"
     }
@@ -25,20 +29,21 @@ pipeline {
 
         stage('Build & Test') {
             steps {
-                sh 'mvn clean test'
+                sh 'mvn -B clean test'
             }
-           post {
-              always {
-                 junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true
-                 }
+            post {
+                always {
+                    // Don’t fail if there are no tests yet
+                    junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true
+                }
             }
         }
 
-        stage('Package JAR') {
+        stage('Package WAR') {
             steps {
                 sh '''
-                    mvn clean package -DskipTests
-                    ls -lh target/*.jar
+                    mvn -B clean package -DskipTests
+                    ls -lh target/*.war
                 '''
             }
         }
@@ -56,25 +61,29 @@ pipeline {
                 }
             }
         }
+
         stage('Deploy to App EC2 (main only)') {
-            when {
-                branch 'main'
-            }
+            when { branch 'main' }
             steps {
                 sshagent(['92780e8f-44c7-4efa-9c57-7e888395ba60']) {
                     sh """
-                        ssh -o StrictHostKeyChecking=no ubuntu@${DEPLOY_HOST} "mkdir -p /opt/social_media_app"
-                        scp -o StrictHostKeyChecking=no target/*.jar ubuntu@${DEPLOY_HOST}:/opt/social_media_app/app.jar
-                        ssh -o StrictHostKeyChecking=no ubuntu@${DEPLOY_HOST} "pkill -f app.jar" || true
-                        ssh -o StrictHostKeyChecking=no ubuntu@${DEPLOY_HOST} "nohup java -jar /opt/social_media_app/app.jar > /opt/social_media_app/app.log 2>&1 &"
-                        """
+                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} 'mkdir -p ${APP_DIR}'
 
+                        # Copy WAR to app folder (keep a backup)
+                        scp -o StrictHostKeyChecking=no target/*.war ${DEPLOY_USER}@${DEPLOY_HOST}:${APP_DIR}/Social-Media.war
+
+                        # Deploy WAR into Tomcat10 webapps and restart tomcat10 service
+                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} '
+                          sudo cp ${APP_DIR}/Social-Media.war ${TOMCAT_WEBAPPS}/Social-Media.war &&
+                          sudo rm -rf ${TOMCAT_WEBAPPS}/Social-Media &&
+                          sudo systemctl daemon-reload || true &&
+                          sudo systemctl restart tomcat10 &&
+                          sudo systemctl is-active --quiet tomcat10
+                        '
+                    """
                 }
             }
         }
-
-
-
     }
 
     post {
@@ -89,5 +98,3 @@ pipeline {
         }
     }
 }
-message.txt
-3 KB
