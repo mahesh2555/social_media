@@ -27,10 +27,10 @@ pipeline {
             steps {
                 sh 'mvn clean test'
             }
-            post {
-                always {
-                    junit 'target/surefire-reports/*.xml'
-                }
+           post {
+              always {
+                 junit testResults: '**/target/surefire-reports/*.xml', allowEmptyResults: true
+                 }
             }
         }
 
